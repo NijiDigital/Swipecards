@@ -2,6 +2,9 @@ package com.lorentzos.flingswipe;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
 import android.graphics.PointF;
 import android.util.Log;
 import android.view.MotionEvent;
@@ -176,24 +179,17 @@ public class FlingCardListener implements View.OnTouchListener {
     }
 
     private float getScrollProgressPercent() {
-        if (movedBeyondLeftBorder()) {
-            return -1f;
-        } else if (movedBeyondRightBorder()) {
-            return 1f;
-        } else {
-            float zeroToOneValue = (aPosX + halfWidth - leftBorder()) / (rightBorder() - leftBorder());
-            return zeroToOneValue * 2f - 1f;
-        }
+        return aPosX / objectW;
     }
 
     private boolean resetCardViewOnStack() {
         if (movedBeyondLeftBorder()) {
             // Left Swipe
-            onSelected(true, getExitPoint(-objectW), 100);
+            onSelected(true, getExitPoint(-objectW), 50);
             mFlingListener.onScroll(-1.0f);
         } else if (movedBeyondRightBorder()) {
             // Right Swipe
-            onSelected(false, getExitPoint(parentWidth), 100);
+            onSelected(false, getExitPoint(parentWidth), 50);
             mFlingListener.onScroll(1.0f);
         } else {
             float abslMoveDistance = Math.abs(aPosX - objectX);
@@ -233,8 +229,7 @@ public class FlingCardListener implements View.OnTouchListener {
     }
 
 
-    public void onSelected(final boolean isLeft,
-                           float exitY, long duration) {
+    public void onSelected(final boolean isLeft, float exitY, long duration) {
 
         isAnimationRunning = true;
         float exitX;
@@ -244,25 +239,34 @@ public class FlingCardListener implements View.OnTouchListener {
             exitX = parentWidth + getRotationWidthOffset();
         }
 
-        this.frame.animate()
-                .setDuration(duration)
-                .setInterpolator(new AccelerateInterpolator())
-                .x(exitX)
-                .y(exitY)
-                .setListener(new AnimatorListenerAdapter() {
-                    @Override
-                    public void onAnimationEnd(Animator animation) {
-                        if (isLeft) {
-                            mFlingListener.onCardExited();
-                            mFlingListener.leftExit(dataObject);
-                        } else {
-                            mFlingListener.onCardExited();
-                            mFlingListener.rightExit(dataObject);
-                        }
-                        isAnimationRunning = false;
-                    }
-                })
-                .rotation(getExitRotation(isLeft));
+        PropertyValuesHolder x = PropertyValuesHolder.ofFloat(View.X, exitX);
+        PropertyValuesHolder y = PropertyValuesHolder.ofFloat(View.Y, exitY);
+        PropertyValuesHolder rotation = PropertyValuesHolder.ofFloat(View.ROTATION, getExitRotation(isLeft));
+        ObjectAnimator animator = ObjectAnimator.ofPropertyValuesHolder(frame, x, y, rotation);
+        animator.setDuration(duration);
+        animator.setInterpolator(new AccelerateInterpolator());
+        animator.addListener(new AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(Animator animation) {
+                if (isLeft) {
+                    mFlingListener.onCardExited();
+                    mFlingListener.leftExit(dataObject);
+                } else {
+                    mFlingListener.onCardExited();
+                    mFlingListener.rightExit(dataObject);
+                }
+                isAnimationRunning = false;
+            }
+        });
+        animator.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            @Override
+            public void onAnimationUpdate(ValueAnimator animation) {
+                if (mFlingListener != null) {
+                    mFlingListener.onScroll(getScrollProgressPercent());
+                }
+            }
+        });
+        animator.start();
     }
 
 
